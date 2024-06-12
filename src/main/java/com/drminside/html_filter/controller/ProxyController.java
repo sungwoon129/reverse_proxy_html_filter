@@ -17,15 +17,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.InflaterInputStream;
 
 @RestController
 public class ProxyController {
@@ -61,30 +57,22 @@ public class ProxyController {
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String headerName = headerNames.nextElement();
-            if (!headerName.equalsIgnoreCase("host") && !headerName.equalsIgnoreCase("accept-encoding")) {
+            if (!headerName.equalsIgnoreCase("host") && !headerName.equalsIgnoreCase("accept-encoding") ) {
                 proxyRequest.setHeader(headerName, request.getHeader(headerName));
             }
         }
 
-
         HttpResponse proxyResponse = httpClient.execute(proxyRequest);
         HttpEntity entity = proxyResponse.getEntity();
         HttpHeaders headers = new HttpHeaders();
+
         for (Header header : proxyResponse.getAllHeaders()) {
             headers.add(header.getName(), header.getValue());
         }
 
         byte[] responseBody = null;
-        if(entity != null) responseBody = EntityUtils.toByteArray(entity);
-        String contentEncoding = headers.getFirst("Content-Encoding");
-
-
-        if ("gzip".equalsIgnoreCase(contentEncoding)) {
-            responseBody = decompressGzip(responseBody);
-            headers.remove("Content-Encoding");
-        } else if ("deflate".equalsIgnoreCase(contentEncoding)) {
-            responseBody = decompressDeflate(responseBody);
-            headers.remove("Content-Encoding");
+        if(entity != null) {
+            responseBody = EntityUtils.toByteArray(entity);
         }
 
         String contentType = headers.getContentType() != null ? headers.getContentType().toString() : "";
@@ -92,47 +80,25 @@ public class ProxyController {
         if (contentType.startsWith("image/") || contentType.equals("application/octet-stream")) {
             return handleBinaryResponse(responseBody, headers, proxyResponse.getStatusLine().getStatusCode());
         } else {
-            return handleHtmlResponse(new String(responseBody, StandardCharsets.UTF_8), headers, proxyResponse.getStatusLine().getStatusCode());
+            return handleHtmlResponse(responseBody, headers, proxyResponse.getStatusLine().getStatusCode());
         }
-
     }
 
     private ResponseEntity<byte[]> handleBinaryResponse(byte[] responseBody, HttpHeaders headers, int statusCode) {
         return new ResponseEntity<>(responseBody, headers, HttpStatus.valueOf(statusCode));
     }
 
-    private ResponseEntity<String> handleHtmlResponse(String responseBody, HttpHeaders headers, int statusCode) {
-        responseBody = responseBody.replaceAll("<img class=\"jfN4p\"[^>]*>",
-                "<img id=\"dimg_YZ9pZqjaCIvJ1e8PqdP9wAM_29\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC0AAAA4CAMAAABe34GAAAAAZlBMVEUAAAD////u7u6Dg4OTk5NkZGSsrKzg4OD19fWLi4vZ2dkVFRUyMjL6+vppaWnm5uZXV1d5eXnS0tIqKipeXl47Ozu2trafn5/BwcEiIiIaGhrLy8uZmZlSUlKlpaVvb28LCwtFRUUINVvnAAABgUlEQVRIiZXW63qCMAwG4EDlaDkqiEPB3f9NjtJGixz6Lf/o3ofFpG0g7zB60dysRzqy3Z2ITqAOSEUI6UzOmGpINxovwK5ODK4QXRhMEaLzrVfv6Zg2st7VrcEFpPVvPH/hPT2nnayWd7T4KYd4vWzrLO3rr/+dtkPYRWsdP0ynRcpLXcCVqdKl5tapkOGURGSvEAXxRxdnWsb38xQp63T9t42otfYhrFql9AXDctYnDAdz3rEbqrjqmmCvvpt6bxRrI3R7KMLzmHQI6d7oCtK8q0oEP1lLRAvWL0TzKUKs9W6o3Dnrxm2JLqyvUCr+v+ptBgQNkDbtoR7TuoYEbm+9U8iDmkl85hM31NEqXaOaAp/Q5quQk37AeiD88qGpft5nIrkin++qwg3niPStOUI4MHcs1k+f72/kmrh9ZsPTiaU1Sdy5FPbccfW/XUwp7/hUiOVMW176cqxG+3jzl4Q1Xbkwl1BP4Szkrf/+bLNnsZ80r19hf0fVSSnLk/9+/gNKNAxPI/SsfAAAAABJRU5ErkJggg==\" class=\"YQ4gaf zr758c wA1Bge\" height=\"56\" width=\"45\" alt=\"\" data-csiid=\"13\" data-atf=\"1\">");
+    private ResponseEntity<String> handleHtmlResponse(byte[] responseBody, HttpHeaders headers, int statusCode) {
+        String responseBodyStr = responseBody == null ? null : new String(responseBody, StandardCharsets.UTF_8);
 
-        return new ResponseEntity<>(responseBody, headers, HttpStatus.valueOf(statusCode));
-    }
-
-    private byte[] decompressGzip(byte[] compressed) throws IOException {
-        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(compressed);
-             GZIPInputStream gzipInputStream = new GZIPInputStream(byteArrayInputStream);
-             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
-
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = gzipInputStream.read(buffer)) != -1) {
-                byteArrayOutputStream.write(buffer, 0, length);
-            }
-            return byteArrayOutputStream.toByteArray();
+        if(responseBodyStr != null) {
+            responseBodyStr = responseBodyStr.replaceAll("<img class=\"jfN4p\"[^>]*>",
+                    "<img id=\"dimg_YZ9pZqjaCIvJ1e8PqdP9wAM_29\" " +
+                            "src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC0AAAA4CAMAAABe34GAAAAAZlBMVEUAAAD////u7u6Dg4OTk5NkZGSsrKzg4OD19fWLi4vZ2dkVFRUyMjL6+vppaWnm5uZXV1d5eXnS0tIqKipeXl47Ozu2trafn5/BwcEiIiIaGhrLy8uZmZlSUlKlpaVvb28LCwtFRUUINVvnAAABgUlEQVRIiZXW63qCMAwG4EDlaDkqiEPB3f9NjtJGixz6Lf/o3ofFpG0g7zB60dysRzqy3Z2ITqAOSEUI6UzOmGpINxovwK5ODK4QXRhMEaLzrVfv6Zg2st7VrcEFpPVvPH/hPT2nnayWd7T4KYd4vWzrLO3rr/+dtkPYRWsdP0ynRcpLXcCVqdKl5tapkOGURGSvEAXxRxdnWsb38xQp63T9t42otfYhrFql9AXDctYnDAdz3rEbqrjqmmCvvpt6bxRrI3R7KMLzmHQI6d7oCtK8q0oEP1lLRAvWL0TzKUKs9W6o3Dnrxm2JLqyvUCr+v+ptBgQNkDbtoR7TuoYEbm+9U8iDmkl85hM31NEqXaOaAp/Q5quQk37AeiD88qGpft5nIrkin++qwg3niPStOUI4MHcs1k+f72/kmrh9ZsPTiaU1Sdy5FPbccfW/XUwp7/hUiOVMW176cqxG+3jzl4Q1Xbkwl1BP4Szkrf/+bLNnsZ80r19hf0fVSSnLk/9+/gNKNAxPI/SsfAAAAABJRU5ErkJggg==\"" +
+                            " class=\"YQ4gaf zr758c wA1Bge\" height=\"56\" width=\"45\" alt=\"\" data-csiid=\"13\" data-atf=\"1\">");
         }
-    }
 
-    private byte[] decompressDeflate(byte[] compressed) throws IOException {
-        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(compressed);
-             InflaterInputStream inflaterInputStream = new InflaterInputStream(byteArrayInputStream);
-             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
 
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = inflaterInputStream.read(buffer)) != -1) {
-                byteArrayOutputStream.write(buffer, 0, length);
-            }
-            return byteArrayOutputStream.toByteArray();
-        }
+        return new ResponseEntity<>(responseBodyStr, headers, HttpStatus.valueOf(statusCode));
     }
 }
