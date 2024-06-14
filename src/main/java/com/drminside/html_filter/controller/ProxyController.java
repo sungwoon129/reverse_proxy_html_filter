@@ -98,7 +98,6 @@ public class ProxyController {
                             " class=\"YQ4gaf zr758c wA1Bge\" height=\"56\" width=\"45\" alt=\"\" data-csiid=\"13\" data-atf=\"1\">");
         }
 
-
         return new ResponseEntity<>(responseBodyStr, headers, HttpStatus.valueOf(statusCode));
     }
 }
